@@ -41,6 +41,8 @@ npm run dev
 ```bash
 npm run build
 ```
+## 网站地址
+https://wechat-style-extractor.godkey810.chatgpt.site/
 
 ## 产品路线
 
