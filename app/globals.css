@@ -66,6 +66,8 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .primary-button:disabled { cursor: wait; opacity: .72; }
 .process-note { display: flex; align-items: center; gap: 8px; min-height: 27px; margin-top: 13px; color: #888178; font-size: 12px; }
 .process-note.is-done { color: #617363; }
+.process-note.is-error { color: #b6462a; }
+.process-note.is-error .process-icon { border-color: rgba(182, 70, 42, .4); }
 .process-icon { width: 19px; height: 19px; display: inline-grid; place-items: center; border: 1px solid #cfcac2; border-radius: 50%; font-size: 9px; }
 .process-icon svg, .saved-pill svg, .compatibility svg { width: 14px; height: 14px; }
 
@@ -105,6 +107,9 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .phone-topbar { height: 52px; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eeeae5; color: #666; font-size: 13px; }
 .phone-topbar b { color: #333; font-size: 12px; font-weight: 640; }
 .wechat-page { height: 515px; padding: 25px 25px 34px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #d6d1ca transparent; }
+.wechat-page img { max-width: 100%; height: auto; }
+.wechat-page table { max-width: 100%; border-collapse: collapse; }
+.wechat-page * { overflow-wrap: break-word; }
 .preview-caption { margin: 14px 0 0; color: #878078; font-size: 10px; text-align: center; }
 footer { width: min(1180px, calc(100% - 44px)); margin: 0 auto; padding: 0 0 34px; display: flex; justify-content: space-between; color: #817b73; font-size: 11px; }
 footer p { margin: 0; }

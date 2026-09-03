@@ -1,18 +1,48 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { ExtractedArticle } from '@/lib/wechat-extractor';
 
 const SOURCE_URL =
   'https://mp.weixin.qq.com/s/OmGJIA9-srVV3mVIjjo2gQ';
 
-const styleTokens = [
-  { label: '强调色', value: '#E94F1F', swatch: '#E94F1F' },
-  { label: '正文色', value: '#3F3F3F', swatch: '#3F3F3F' },
-  { label: '卡片底色', value: '#F7F7F7', swatch: '#F7F7F7' },
-  { label: '正文字号', value: '16 px' },
-  { label: '正文行高', value: '1.8 ×' },
-  { label: '段落间距', value: '14 px' },
-];
+const INITIAL_RESULT: ExtractedArticle = {
+  sourceUrl: SOURCE_URL,
+  title: 'AI 都能写代码了，普通人还剩什么机会？',
+  author: '子扬AI',
+  templateName: '橙灰知识风',
+  description: '理性、直接、留白克制，以橙色强调关键判断。',
+  tokens: [
+    { label: '强调色', value: '#E94F1F', swatch: '#E94F1F' },
+    { label: '正文色', value: '#3F3F3F', swatch: '#3F3F3F' },
+    { label: '卡片底色', value: '#F7F7F7', swatch: '#F7F7F7' },
+    { label: '正文字号', value: '16 px' },
+    { label: '正文行高', value: '1.8 ×' },
+    { label: '段落间距', value: '14 px' },
+  ],
+  components: [
+    { label: '章节标题', detail: '橙色序号 · 20 px' },
+    { label: '重点提示卡', detail: '左侧 4 px 强调线' },
+    { label: '虚线分隔', detail: '上下留白 24 px' },
+    { label: '结尾行动卡', detail: '浅灰底 · 8 px 圆角' },
+  ],
+  baseStyle: {
+    color: '#3F3F3F',
+    fontSize: '16px',
+    lineHeight: '1.8',
+    letterSpacing: '0.3px',
+  },
+  ruleCount: 10,
+  html: `
+    <p style="margin:0 0 14px">当 AI 把执行效率推到新的高度，真正稀缺的能力，开始从“做得更快”转向“判断什么值得做”。</p>
+    <section style="margin:0 0 14px;padding:12px 16px;color:#333;background:#f7f7f7;border-left:4px solid #e94f1f;border-radius:0 6px 6px 0"><p style="margin:0">💭 普通人的机会，不在和 AI 比速度，而在定义问题和把控结果。</p></section>
+    <div style="margin:24px 0;border-top:1px dashed #ddd"></div>
+    <h3 style="margin:0 0 14px;color:#222;font-size:20px;line-height:1.5"><span style="color:#e94f1f">01</span>｜先看清变化发生在哪里</h3>
+    <p style="margin:0 0 14px">需求、流程和判断正在成为新的瓶颈。把经验写清楚、让 AI 循环执行，再由人负责最后的取舍。</p>
+    <p style="margin:0 0 14px"><strong style="color:#e94f1f">意图优先</strong>，比单纯追求工具熟练度更重要。</p>
+    <section style="margin-top:24px;padding:16px 18px;color:#666;font-size:15px;background:#f7f7f7;border-radius:8px"><p style="margin:0">如果这篇文章对你有启发，欢迎点赞、收藏，和我一起探索 AI 时代的个人机会。</p></section>
+  `,
+};
 
 function CheckIcon() {
   return (
@@ -34,39 +64,47 @@ export default function Home() {
   const [url, setUrl] = useState(SOURCE_URL);
   const [isExtracting, setIsExtracting] = useState(false);
   const [hasExtracted, setHasExtracted] = useState(true);
-  const [notice, setNotice] = useState('已从示例文章提取 8 项样式规则');
+  const [notice, setNotice] = useState('已加载示例；可粘贴任意公开公众号文章');
+  const [result, setResult] = useState<ExtractedArticle>(INITIAL_RESULT);
+  const [hasError, setHasError] = useState(false);
 
   const sourceLabel = useMemo(() => {
     try {
-      return new URL(url).hostname === 'mp.weixin.qq.com'
+      return new URL(url).hostname.toLowerCase() === 'mp.weixin.qq.com'
         ? '微信公众号文章'
-        : '网页文章';
+        : '仅支持微信公众号文章';
     } catch {
       return '等待有效链接';
     }
   }, [url]);
 
-  const extractStyle = () => {
-    if (!url.trim().startsWith('http')) {
-      setNotice('请先粘贴有效的公众号文章链接');
-      setHasExtracted(false);
-      return;
-    }
-
-    if (url.trim() !== SOURCE_URL) {
-      setNotice('当前视觉原型仅内置示例链接；正式版将接入任意链接解析服务');
-      setHasExtracted(false);
-      return;
-    }
-
+  const extractStyle = async () => {
     setIsExtracting(true);
     setHasExtracted(false);
+    setHasError(false);
     setNotice('正在识别正文、标题、强调色与组件…');
-    window.setTimeout(() => {
-      setIsExtracting(false);
+
+    try {
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const payload = (await response.json()) as
+        | { ok: true; data: ExtractedArticle }
+        | { ok: false; error: { code: string; message: string } };
+
+      if (!payload.ok) throw new Error(payload.error.message);
+
+      setResult(payload.data);
       setHasExtracted(true);
-      setNotice('提取完成：已生成「子扬 AI · 橙灰知识风」');
-    }, 1100);
+      setNotice(`提取完成：识别到 ${payload.data.ruleCount} 项样式规则`);
+    } catch (error) {
+      setHasError(true);
+      setNotice(error instanceof Error ? error.message : '解析失败，请稍后重试');
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const copyToWechat = async () => {
@@ -93,8 +131,10 @@ export default function Home() {
         selection?.removeAllRanges();
       }
       setNotice('已复制富文本，可直接粘贴到公众号编辑器');
+      setHasError(false);
     } catch {
       setNotice('浏览器未允许剪贴板权限，请选中右侧预览后复制');
+      setHasError(true);
     }
   };
 
@@ -110,7 +150,7 @@ export default function Home() {
         </a>
         <div className="header-note">
           <span className="status-dot" />
-          本地原型 · 示例链接已解析
+          通用解析 · 公开文章可用
         </div>
       </header>
 
@@ -132,6 +172,10 @@ export default function Home() {
                 aria-label="公众号文章链接"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !isExtracting) void extractStyle();
+                }}
+                placeholder="粘贴 https://mp.weixin.qq.com/..."
                 spellCheck={false}
               />
             </div>
@@ -142,8 +186,8 @@ export default function Home() {
           </button>
         </div>
 
-        <div className={`process-note ${hasExtracted ? 'is-done' : ''}`} role="status">
-          <span className="process-icon">{hasExtracted ? <CheckIcon /> : '···'}</span>
+        <div className={`process-note ${hasExtracted ? 'is-done' : ''} ${hasError ? 'is-error' : ''}`} role="status">
+          <span className="process-icon">{hasExtracted ? <CheckIcon /> : hasError ? '!' : '···'}</span>
           {notice}
         </div>
       </section>
@@ -155,17 +199,17 @@ export default function Home() {
               <span className="section-index">02</span>
               <p>视觉模板</p>
             </div>
-            <span className="saved-pill"><CheckIcon /> 已保存</span>
+            <span className="saved-pill"><CheckIcon /> 已提取</span>
           </div>
 
           <div className="template-name">
-            <span>提取自「子扬AI」</span>
-            <h2>橙灰知识风</h2>
-            <p>理性、直接、留白克制，以橙色强调关键判断。</p>
+            <span>提取自「{result.author}」</span>
+            <h2>{result.templateName}</h2>
+            <p>{result.description}</p>
           </div>
 
           <div className="token-grid">
-            {styleTokens.map((token) => (
+            {result.tokens.map((token) => (
               <div className="token" key={token.label}>
                 <span className="token-label">{token.label}</span>
                 <span className="token-value">
@@ -178,22 +222,12 @@ export default function Home() {
 
           <div className="component-list">
             <p className="list-label">识别到的组件</p>
-            <div className="component-row">
-              <span>01｜章节标题</span>
-              <span>橙色序号 · 20 px</span>
-            </div>
-            <div className="component-row">
-              <span>重点提示卡</span>
-              <span>左侧 4 px 强调线</span>
-            </div>
-            <div className="component-row">
-              <span>虚线分隔</span>
-              <span>上下留白 24 px</span>
-            </div>
-            <div className="component-row">
-              <span>结尾行动卡</span>
-              <span>浅灰底 · 8 px 圆角</span>
-            </div>
+            {result.components.map((component, index) => (
+              <div className="component-row" key={`${component.label}-${index}`}>
+                <span>{component.label}</span>
+                <span>{component.detail}</span>
+              </div>
+            ))}
           </div>
         </aside>
 
@@ -220,30 +254,24 @@ export default function Home() {
                 <span>•••</span>
               </div>
               <div className="wechat-page">
-                <div id="wechat-content" style={{ color: '#3f3f3f', fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif', fontSize: '16px', lineHeight: 1.8, letterSpacing: '0.3px' }}>
+                <div
+                  id="wechat-content"
+                  style={{
+                    color: result.baseStyle.color,
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
+                    fontSize: result.baseStyle.fontSize,
+                    lineHeight: result.baseStyle.lineHeight,
+                    letterSpacing: result.baseStyle.letterSpacing,
+                    overflowWrap: 'break-word',
+                  }}
+                >
                   <h2 style={{ margin: '0 0 12px', color: '#1f1f1f', fontSize: '23px', lineHeight: 1.45, letterSpacing: '-0.2px' }}>
-                    AI 都能写代码了，普通人还剩什么机会？
+                    {result.title}
                   </h2>
-                  <p style={{ margin: '0 0 22px', color: '#999', fontSize: '13px' }}>子扬AI · 6 分钟阅读</p>
-                  <p style={{ margin: '0 0 14px' }}>
-                    当 AI 把执行效率推到新的高度，真正稀缺的能力，开始从“做得更快”转向“判断什么值得做”。
+                  <p style={{ margin: '0 0 22px', color: '#999', fontSize: '13px' }}>
+                    {result.author}
                   </p>
-                  <section style={{ margin: '0 0 14px', padding: '12px 16px', color: '#333', background: '#f7f7f7', borderLeft: '4px solid #e94f1f', borderRadius: '0 6px 6px 0' }}>
-                    <p style={{ margin: 0 }}>💭 普通人的机会，不在和 AI 比速度，而在定义问题和把控结果。</p>
-                  </section>
-                  <div style={{ margin: '24px 0', borderTop: '1px dashed #ddd' }} />
-                  <h3 style={{ margin: '0 0 14px', color: '#222', fontSize: '20px', lineHeight: 1.5 }}>
-                    <span style={{ color: '#e94f1f' }}>01</span>｜先看清变化发生在哪里
-                  </h3>
-                  <p style={{ margin: '0 0 14px' }}>
-                    需求、流程和判断正在成为新的瓶颈。把经验写清楚、让 AI 循环执行，再由人负责最后的取舍。
-                  </p>
-                  <p style={{ margin: '0 0 14px' }}>
-                    <strong style={{ color: '#e94f1f' }}>意图优先</strong>，比单纯追求工具熟练度更重要。
-                  </p>
-                  <section style={{ marginTop: '24px', padding: '16px 18px', color: '#666', fontSize: '15px', background: '#f7f7f7', borderRadius: '8px' }}>
-                    <p style={{ margin: 0 }}>如果这篇文章对你有启发，欢迎点赞、收藏，和我一起探索 AI 时代的个人机会。</p>
-                  </section>
+                  <div dangerouslySetInnerHTML={{ __html: result.html }} />
                 </div>
               </div>
             </article>
@@ -254,7 +282,7 @@ export default function Home() {
 
       <footer>
         <p>样格 · 把好排版变成可复用资产</p>
-        <span>MVP 01 / 公众号视觉提取</span>
+        <span>任意公开文章 / 公众号视觉提取</span>
       </footer>
     </main>
   );
