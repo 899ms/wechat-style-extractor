@@ -1,6 +1,6 @@
 # 样格 · WeChat Style Extractor
 
-![样格社交预览](public/og.png)
+![样格社交预览](public/介绍图.png)
 
 从一篇公众号文章中识别颜色、字号、行高、间距和内容组件，将好排版沉淀为可复用的视觉模板。
 
