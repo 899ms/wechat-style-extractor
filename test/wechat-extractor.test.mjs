@@ -77,3 +77,27 @@ test('reports WeChat verification pages clearly', () => {
     (error) => error instanceof ExtractorError && error.code === 'ARTICLE_BLOCKED',
   );
 });
+
+
+test('does not report fallback styles as extracted evidence', () => {
+  const result = parseWechatArticle(
+    '<div id="js_content"><p>这是一篇没有指定任何样式的公众号测试文章。</p></div>',
+    'https://mp.weixin.qq.com/s/plain',
+  );
+  assert.deepEqual(result.tokens, []);
+  assert.equal(result.baseStyle.fontSize, '16px');
+});
+
+test('counts each heading, quote and separator once and preserves zero spacing', () => {
+  const result = parseWechatArticle(`
+    <div id="js_content">
+      <h2>一个标题</h2>
+      <blockquote style="border-left:4px solid #333">这是一段足够长的引用测试内容。</blockquote>
+      <hr style="border-top:1px dashed #333">
+      <p style="margin-bottom:0px">没有段落间距的正文。</p>
+    </div>`, 'https://mp.weixin.qq.com/s/counts');
+  for (const label of ['章节标题', '引用 / 重点提示', '内容分隔']) {
+    assert.match(result.components.find((item) => item.label === label).detail, /^1 处/);
+  }
+  assert.equal(result.tokens.find((item) => item.label === '段落间距').value, '0 px');
+});

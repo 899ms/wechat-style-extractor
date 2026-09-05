@@ -1,48 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ExtractedArticle } from '@/lib/wechat-extractor';
-
-const SOURCE_URL =
-  'https://mp.weixin.qq.com/s/OmGJIA9-srVV3mVIjjo2gQ';
-
-const INITIAL_RESULT: ExtractedArticle = {
-  sourceUrl: SOURCE_URL,
-  title: 'AI 都能写代码了，普通人还剩什么机会？',
-  author: '子扬AI',
-  templateName: '橙灰知识风',
-  description: '理性、直接、留白克制，以橙色强调关键判断。',
-  tokens: [
-    { label: '强调色', value: '#E94F1F', swatch: '#E94F1F' },
-    { label: '正文色', value: '#3F3F3F', swatch: '#3F3F3F' },
-    { label: '卡片底色', value: '#F7F7F7', swatch: '#F7F7F7' },
-    { label: '正文字号', value: '16 px' },
-    { label: '正文行高', value: '1.8 ×' },
-    { label: '段落间距', value: '14 px' },
-  ],
-  components: [
-    { label: '章节标题', detail: '橙色序号 · 20 px' },
-    { label: '重点提示卡', detail: '左侧 4 px 强调线' },
-    { label: '虚线分隔', detail: '上下留白 24 px' },
-    { label: '结尾行动卡', detail: '浅灰底 · 8 px 圆角' },
-  ],
-  baseStyle: {
-    color: '#3F3F3F',
-    fontSize: '16px',
-    lineHeight: '1.8',
-    letterSpacing: '0.3px',
-  },
-  ruleCount: 10,
-  html: `
-    <p style="margin:0 0 14px">当 AI 把执行效率推到新的高度，真正稀缺的能力，开始从“做得更快”转向“判断什么值得做”。</p>
-    <section style="margin:0 0 14px;padding:12px 16px;color:#333;background:#f7f7f7;border-left:4px solid #e94f1f;border-radius:0 6px 6px 0"><p style="margin:0">💭 普通人的机会，不在和 AI 比速度，而在定义问题和把控结果。</p></section>
-    <div style="margin:24px 0;border-top:1px dashed #ddd"></div>
-    <h3 style="margin:0 0 14px;color:#222;font-size:20px;line-height:1.5"><span style="color:#e94f1f">01</span>｜先看清变化发生在哪里</h3>
-    <p style="margin:0 0 14px">需求、流程和判断正在成为新的瓶颈。把经验写清楚、让 AI 循环执行，再由人负责最后的取舍。</p>
-    <p style="margin:0 0 14px"><strong style="color:#e94f1f">意图优先</strong>，比单纯追求工具熟练度更重要。</p>
-    <section style="margin-top:24px;padding:16px 18px;color:#666;font-size:15px;background:#f7f7f7;border-radius:8px"><p style="margin:0">如果这篇文章对你有启发，欢迎点赞、收藏，和我一起探索 AI 时代的个人机会。</p></section>
-  `,
-};
 
 function CheckIcon() {
   return (
@@ -61,28 +20,19 @@ function ArrowIcon() {
 }
 
 export default function Home() {
-  const [url, setUrl] = useState(SOURCE_URL);
+  const [url, setUrl] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
-  const [hasExtracted, setHasExtracted] = useState(true);
-  const [notice, setNotice] = useState('已加载示例；可粘贴任意公开公众号文章');
-  const [result, setResult] = useState<ExtractedArticle>(INITIAL_RESULT);
+  const [notice, setNotice] = useState('支持公开的公众号文章链接');
+  const [result, setResult] = useState<ExtractedArticle | null>(null);
   const [hasError, setHasError] = useState(false);
-
-  const sourceLabel = useMemo(() => {
-    try {
-      return new URL(url).hostname.toLowerCase() === 'mp.weixin.qq.com'
-        ? '微信公众号文章'
-        : '仅支持微信公众号文章';
-    } catch {
-      return '等待有效链接';
-    }
-  }, [url]);
+  const [copyNotice, setCopyNotice] = useState('');
 
   const extractStyle = async () => {
     setIsExtracting(true);
-    setHasExtracted(false);
+    setResult(null);
+    setCopyNotice('');
     setHasError(false);
-    setNotice('正在识别正文、标题、强调色与组件…');
+    setNotice('正在读取文章并提取样式，请稍候…');
 
     try {
       const response = await fetch('/api/extract', {
@@ -97,8 +47,7 @@ export default function Home() {
       if (!payload.ok) throw new Error(payload.error.message);
 
       setResult(payload.data);
-      setHasExtracted(true);
-      setNotice(`提取完成：识别到 ${payload.data.ruleCount} 项样式规则`);
+      setNotice('提取完成。查看样式，或复制文章排版。');
     } catch (error) {
       setHasError(true);
       setNotice(error instanceof Error ? error.message : '解析失败，请稍后重试');
@@ -127,14 +76,12 @@ export default function Home() {
         range.selectNode(content);
         selection?.removeAllRanges();
         selection?.addRange(range);
-        document.execCommand('copy');
+        if (!document.execCommand('copy')) throw new Error('Copy failed');
         selection?.removeAllRanges();
       }
-      setNotice('已复制富文本，可直接粘贴到公众号编辑器');
-      setHasError(false);
+      setCopyNotice('排版已复制，请到公众号编辑器中粘贴。');
     } catch {
-      setNotice('浏览器未允许剪贴板权限，请选中右侧预览后复制');
-      setHasError(true);
+      setCopyNotice('复制未成功，请选中预览中的正文手动复制。');
     }
   };
 
@@ -148,67 +95,69 @@ export default function Home() {
             <small>WECHAT STYLE</small>
           </span>
         </a>
-        <div className="header-note">
-          <span className="status-dot" />
-          通用解析 · 公开文章可用
-        </div>
+        <span className="header-note">公众号排版工具</span>
       </header>
 
       <section className="hero" id="top">
-        <div className="eyebrow"><span>01</span> 从一篇文章开始</div>
-        <h1>一篇文章，沉淀一套<br />公众号视觉风格。</h1>
+        <div className="eyebrow">从一篇文章开始</div>
+        <h1>提取公众号文章的<span>排版</span></h1>
         <p className="hero-copy">
-          粘贴公众号文章链接，识别字体、颜色、间距与内容组件，
-          生成可持续复用的排版模板。
+          看配色、字号与间距，留住值得参考的排版。
         </p>
 
-        <div className="extract-bar">
-          <div className="url-field">
-            <span className="link-glyph">↗</span>
-            <div>
-              <label htmlFor="source-url">{sourceLabel}</label>
+        <form className="extract-form" onSubmit={(event) => {
+          event.preventDefault();
+          if (!isExtracting) void extractStyle();
+        }}>
+          <label htmlFor="source-url">文章链接</label>
+          <div className="extract-bar">
+            <div className="url-field">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="m8 12 4-4M7 6l1.5-1.5a4 4 0 0 1 5.7 5.7L13 11M7 9l-1.2 1.2a4 4 0 0 0 5.7 5.7L13 14" />
+              </svg>
               <input
                 id="source-url"
-                aria-label="公众号文章链接"
+                name="url"
+                type="url"
+                required
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !isExtracting) void extractStyle();
-                }}
                 placeholder="粘贴 https://mp.weixin.qq.com/..."
                 spellCheck={false}
+                autoCapitalize="none"
+                autoComplete="off"
+                aria-describedby="extract-status"
               />
             </div>
+            <button className="primary-button" type="submit" disabled={isExtracting}>
+              <span>{isExtracting ? '正在提取…' : '提取排版'}</span>
+              <ArrowIcon />
+            </button>
           </div>
-          <button className="primary-button" onClick={extractStyle} disabled={isExtracting}>
-            <span>{isExtracting ? '正在提取…' : '一键提取格式'}</span>
-            <ArrowIcon />
-          </button>
-        </div>
+        </form>
 
-        <div className={`process-note ${hasExtracted ? 'is-done' : ''} ${hasError ? 'is-error' : ''}`} role="status">
-          <span className="process-icon">{hasExtracted ? <CheckIcon /> : hasError ? '!' : '···'}</span>
+        <div className={`process-note ${result && !hasError ? 'is-done' : ''} ${hasError ? 'is-error' : ''}`} id="extract-status" role="status">
+          <span className="process-icon" aria-hidden="true">{hasError ? '!' : result ? <CheckIcon /> : isExtracting ? '…' : 'i'}</span>
           {notice}
         </div>
       </section>
 
-      <section className="workspace" aria-label="风格提取结果">
+      {result && <section className="workspace" aria-label="排版提取结果">
         <aside className="style-panel">
           <div className="panel-heading">
             <div>
-              <span className="section-index">02</span>
-              <p>视觉模板</p>
+              <span className="section-index">01</span>
+              <h2>样式概览</h2>
             </div>
-            <span className="saved-pill"><CheckIcon /> 已提取</span>
           </div>
 
           <div className="template-name">
-            <span>提取自「{result.author}」</span>
-            <h2>{result.templateName}</h2>
-            <p>{result.description}</p>
+            <span>{result.author}</span>
+            <p className="source-title">{result.title}</p>
+            <p>仅展示识别到的样式，供排版时参考。</p>
           </div>
 
-          <div className="token-grid">
+          {result.tokens.length > 0 ? <div className="token-grid">
             {result.tokens.map((token) => (
               <div className="token" key={token.label}>
                 <span className="token-label">{token.label}</span>
@@ -218,10 +167,10 @@ export default function Home() {
                 </span>
               </div>
             ))}
-          </div>
+          </div> : <p className="empty-tokens">未识别到明确的样式参数，仍可查看文章预览。</p>}
 
           <div className="component-list">
-            <p className="list-label">识别到的组件</p>
+            <h3 className="list-label">内容元素</h3>
             {result.components.map((component, index) => (
               <div className="component-row" key={`${component.label}-${index}`}>
                 <span>{component.label}</span>
@@ -234,13 +183,12 @@ export default function Home() {
         <section className="preview-panel">
           <div className="preview-toolbar">
             <div>
-              <span className="section-index">03</span>
-              <p>公众号预览</p>
+              <span className="section-index">02</span>
+              <h2>排版预览</h2>
             </div>
             <div className="toolbar-actions">
-              <span className="compatibility"><CheckIcon /> 微信兼容</span>
               <button className="copy-button" onClick={copyToWechat}>
-                复制到公众号
+                复制排版
                 <ArrowIcon />
               </button>
             </div>
@@ -248,12 +196,7 @@ export default function Home() {
 
           <div className="phone-stage">
             <article className="phone-frame" aria-label="公众号文章排版预览">
-              <div className="phone-topbar">
-                <span>‹</span>
-                <b>公众号文章预览</b>
-                <span>•••</span>
-              </div>
-              <div className="wechat-page">
+              <div className="wechat-page" tabIndex={0} role="region" aria-label="文章正文，可滚动查看全文">
                 <div
                   id="wechat-content"
                   style={{
@@ -268,21 +211,22 @@ export default function Home() {
                   <h2 style={{ margin: '0 0 12px', color: '#1f1f1f', fontSize: '23px', lineHeight: 1.45, letterSpacing: '-0.2px' }}>
                     {result.title}
                   </h2>
-                  <p style={{ margin: '0 0 22px', color: '#999', fontSize: '13px' }}>
+                  <p style={{ margin: '0 0 22px', color: '#706b64', fontSize: '14px' }}>
                     {result.author}
                   </p>
                   <div dangerouslySetInnerHTML={{ __html: result.html }} />
                 </div>
               </div>
             </article>
-            <p className="preview-caption">已自动转换为微信支持的内联样式</p>
+            <p className="copy-feedback" role="status">{copyNotice}</p>
+            <p className="preview-caption">上下滚动查看全文。粘贴到公众号编辑器后，请检查排版。</p>
           </div>
         </section>
-      </section>
+      </section>}
 
       <footer>
-        <p>样格 · 把好排版变成可复用资产</p>
-        <span>任意公开文章 / 公众号视觉提取</span>
+        <p>样格 · 好排版的参考起点</p>
+        <span>借鉴排版，表达自己的内容</span>
       </footer>
     </main>
   );

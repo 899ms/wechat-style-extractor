@@ -17,8 +17,6 @@ export type ExtractedArticle = {
   title: string;
   author: string;
   html: string;
-  templateName: string;
-  description: string;
   tokens: StyleToken[];
   components: ComponentRule[];
   baseStyle: {
@@ -27,13 +25,10 @@ export type ExtractedArticle = {
     lineHeight: string;
     letterSpacing: string;
   };
-  ruleCount: number;
 };
 
 const MAX_ARTICLE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_TEXT_COLOR = '#3F3F3F';
-const DEFAULT_ACCENT = '#576B95';
-const DEFAULT_BACKGROUND = '#F7F7F7';
 
 const REMOVED_TAGS = [
   'script',
@@ -291,8 +286,8 @@ export async function fetchWechatArticle(input: string): Promise<ExtractedArticl
 }
 
 export function parseWechatArticle(pageHtml: string, sourceUrl: string): ExtractedArticle {
-  const $ = load(pageHtml, { decodeEntities: false });
-  let content = $('#js_content, .rich_media_content, [id^="js_content"]')
+  const $ = load(pageHtml);
+  const content = $('#js_content, .rich_media_content, [id^="js_content"]')
     .filter((_, element) => $(element).text().trim().length > 0)
     .first();
 
@@ -338,10 +333,6 @@ export function parseWechatArticle(pageHtml: string, sourceUrl: string): Extract
     removeStyleTags: true,
     resolveCSSVariables: true,
   });
-  content = $('#js_content, .rich_media_content, [id^="js_content"]')
-    .filter((_, element) => $(element).text().trim().length > 0)
-    .first();
-
   const analysis = analyzeStyles($, content);
   sanitizeContent($, content, sourceUrl);
 
@@ -351,43 +342,43 @@ export function parseWechatArticle(pageHtml: string, sourceUrl: string): Extract
   }
 
   const displayAuthor = author || '公众号作者';
-  const accentName = describeColor(analysis.accentColor);
   const components = buildComponents(analysis);
-  const tokens: StyleToken[] = [
-    { label: '强调色', value: analysis.accentColor, swatch: analysis.accentColor },
-    { label: '正文色', value: analysis.textColor, swatch: analysis.textColor },
-    { label: '卡片底色', value: analysis.backgroundColor, swatch: analysis.backgroundColor },
-    { label: '正文字号', value: formatPixels(analysis.fontSize) },
-    { label: '正文行高', value: formatLineHeight(analysis.lineHeight) },
-    { label: '段落间距', value: formatPixels(analysis.paragraphSpacing) },
+  const tokens: StyleToken[] = [];
+  const colors: [string, string | undefined][] = [
+    ['强调色', analysis.accentColor],
+    ['正文色', analysis.textColor],
+    ['卡片底色', analysis.backgroundColor],
   ];
+  for (const [label, value] of colors) {
+    if (value) tokens.push({ label, value, swatch: value });
+  }
+  if (analysis.fontSize != null) tokens.push({ label: '正文字号', value: `${analysis.fontSize} px` });
+  if (analysis.lineHeight != null) tokens.push({ label: '正文行高', value: `${analysis.lineHeight} ×` });
+  if (analysis.paragraphSpacing != null) tokens.push({ label: '段落间距', value: `${analysis.paragraphSpacing} px` });
 
   return {
     sourceUrl,
     title: title || '公众号文章',
     author: displayAuthor,
     html: cleanedHtml,
-    templateName: `${accentName}公众号风`,
-    description: `提取自「${displayAuthor}」，已保留原文的字体、颜色、间距与内容组件。`,
     tokens,
     components,
     baseStyle: {
-      color: analysis.textColor,
-      fontSize: `${analysis.fontSize}px`,
-      lineHeight: String(analysis.lineHeight),
+      color: analysis.textColor || DEFAULT_TEXT_COLOR,
+      fontSize: `${analysis.fontSize ?? 16}px`,
+      lineHeight: String(analysis.lineHeight ?? 1.75),
       letterSpacing: analysis.letterSpacing,
     },
-    ruleCount: tokens.length + components.length,
   };
 }
 
 type Analysis = {
-  accentColor: string;
-  textColor: string;
-  backgroundColor: string;
-  fontSize: number;
-  lineHeight: number;
-  paragraphSpacing: number;
+  accentColor: string | undefined;
+  textColor: string | undefined;
+  backgroundColor: string | undefined;
+  fontSize: number | undefined;
+  lineHeight: number | undefined;
+  paragraphSpacing: number | null;
   letterSpacing: string;
   headingCount: number;
   quoteCount: number;
@@ -415,9 +406,9 @@ function analyzeStyles($: CheerioAPI, content: ReturnType<CheerioAPI>): Analysis
   const lineHeights = new Map<number, number>();
   const paragraphSpacings: number[] = [];
   const letterSpacings = new Map<string, number>();
-  let headingCount = content.find('h1,h2,h3,h4,h5,h6').length;
-  let quoteCount = content.find('blockquote').length;
-  let separatorCount = content.find('hr').length;
+  const headingCount = content.find('h1,h2,h3,h4,h5,h6').length;
+  let quoteCount = 0;
+  let separatorCount = 0;
   let cardCount = 0;
   let backgroundImageCount = 0;
 
@@ -461,7 +452,7 @@ function analyzeStyles($: CheerioAPI, content: ReturnType<CheerioAPI>): Analysis
     }
 
     const marginBottom = numericPixels(declarations.get('margin-bottom'));
-    if (tagName === 'p' && marginBottom && marginBottom <= 80) paragraphSpacings.push(marginBottom);
+    if (tagName === 'p' && marginBottom != null && marginBottom <= 80) paragraphSpacings.push(marginBottom);
 
     const letterSpacing = declarations.get('letter-spacing');
     if (letterSpacing && !/normal|inherit|initial/.test(letterSpacing)) {
@@ -475,17 +466,16 @@ function analyzeStyles($: CheerioAPI, content: ReturnType<CheerioAPI>): Analysis
     if (['section', 'div', 'blockquote'].includes(tagName) && hasBackground && (hasPadding || hasRadius)) {
       cardCount += 1;
     }
-    if (hasLeftBorder) quoteCount += 1;
-    if (/dashed|dotted/.test(borderValue) || declarations.has('border-top')) separatorCount += 1;
-    if (/^(h[1-6])$/.test(tagName)) headingCount += 1;
+    if (tagName === 'blockquote' || hasLeftBorder) quoteCount += 1;
+    if (tagName === 'hr' || /dashed|dotted/.test(borderValue) || declarations.has('border-top')) separatorCount += 1;
   });
 
-  const accentColor = bestEntry(accentColors) || DEFAULT_ACCENT;
-  const textColor = bestTextColor(textColors) || DEFAULT_TEXT_COLOR;
-  const backgroundColor = bestEntry(backgrounds) || DEFAULT_BACKGROUND;
-  const fontSize = Math.round(bestEntry(fontSizes) || 16);
-  const lineHeight = round(bestEntry(lineHeights) || 1.75, 2);
-  const paragraphSpacing = Math.round(median(paragraphSpacings) || 14);
+  const accentColor = bestEntry(accentColors);
+  const textColor = bestTextColor(textColors);
+  const backgroundColor = bestEntry(backgrounds);
+  const fontSize = bestEntry(fontSizes);
+  const lineHeight = bestEntry(lineHeights);
+  const paragraphSpacing = median(paragraphSpacings);
 
   return {
     accentColor,
@@ -705,29 +695,6 @@ function median(values: number[]): number | null {
     : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function round(value: number, digits: number): number {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
-}
-
-function formatPixels(value: number): string {
-  return `${value} px`;
-}
-
-function formatLineHeight(value: number): string {
-  return `${value} ×`;
-}
-
-function describeColor(hex: string): string {
-  const [r, g, b] = hexChannels(hex);
-  if (Math.max(r, g, b) - Math.min(r, g, b) < 24) return '简约灰';
-  if (r > g * 1.25 && r > b * 1.25) return r > 190 && g > 80 ? '暖橙' : '醒目红';
-  if (b > r * 1.2 && b > g * 1.05) return '清透蓝';
-  if (g > r * 1.15 && g > b * 1.05) return '自然绿';
-  if (r > b * 1.1 && b > g * 1.05) return '雅致紫';
-  return '清晰彩色';
-}
-
 function buildComponents(analysis: Analysis): ComponentRule[] {
   const components: ComponentRule[] = [];
   if (analysis.headingCount) {
@@ -748,5 +715,5 @@ function buildComponents(analysis: Analysis): ComponentRule[] {
   if (!components.length) {
     components.push({ label: '正文段落', detail: '已保留原始层级与间距' });
   }
-  return components.slice(0, 5);
+  return components;
 }
